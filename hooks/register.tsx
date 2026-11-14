@@ -29,10 +29,12 @@ const SCENE_NAME = 'whale-girl'
 // 背景用 scene（SVG）而不是 image：当前 App 版本的图片背景不绘制，场景里嵌入的位图也会被拦掉，
 // 只有纯矢量能显示。场景由 tools/build_scene.py 生成到 hooks/scene.js，
 // 骑鲸少女和喷水鲸鱼由 tools/trace.py 从素材描摹成矢量；为省 CPU，场景是静态的。
-// glass：侧栏毛玻璃调轻（模糊 3、不透明度 0.4），让侧栏底部的喷水鲸鱼看得清
+// glass：所有面板（侧栏、对话区）共用一套毛玻璃，App 默认是模糊 16、不透明度 0.6。
+// 这里调到模糊 2、不透明度 0.2，面板更透，侧栏底部的喷水鲸鱼和波浪能清楚透出来；
+// 插画是浅色粉彩，深色文字压在上面仍然看得清。嫌太透就把 opacity 往 0.3～0.4 调
 const LOOK: ThemeSetArgs = {
   colors: theme,
-  backdrop: { scene: SCENE_NAME, glass: { blur: 3, opacity: 0.4 } },
+  backdrop: { scene: SCENE_NAME, glass: { blur: 2, opacity: 0.2 } },
 }
 
 const STATUS = '🐋 深海模式 · 慢慢游'
