@@ -1,0 +1,133 @@
+import type { On } from 'claude-code'
+import { expect, test } from 'claude-code/testing'
+import type { Plugin } from 'claude-code/testing'
+
+// 测试环境不自带 $.theme，用一个内联插件补上。它的函数在 mod 的环境里运行、拿不到测试里的变量，
+// 所以主题有没有设上，要从后面的状态栏调用和命令回复里间接判断
+const themeHost: Plugin = {
+  name: 'theme-host',
+  tier: 'builtin',
+  register: on => {
+    on('engine.create', async ($, e, next) => {
+      const built = await next(e)
+
+      return {
+        ...built,
+        theme: {
+          set: async () => ({ isDrawn: true, requestId: 'look' }),
+          clear: async () => ({ isDrawn: false, reason: 'cleared' }),
+        },
+      } as typeof built
+    })
+  },
+}
+const withTheme = { plugins: [themeHost] }
+
+// 测试里 on 挂的 hook 代表引擎本身：应答 $.store、$.ui.status 等调用并记录下来
+const fakeEngine = (on: On, stored?: boolean) => {
+  const seen = { store: stored as unknown, status: [] as (string | undefined)[] }
+
+  on('command.register', () => ({ value: { command: 'blue-whale' } }))
+  on('store.get', () => ({ value: seen.store }))
+  on('store.set', (_, e) => {
+    seen.store = e.value
+
+    return { value: undefined }
+  })
+  on('ui.status', (_, e) => {
+    seen.status.push(e.text)
+
+    return { value: undefined }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  return seen
+}
+
+const start = { cwd: '/', surface: 'desktop', isInteractive: true } as const
+const STATUS = '🐋 深海模式 · 慢慢游'
+// 像用户在输入框里敲命令那样运行 /blue-whale
+const typed = (args: string) =>
+  ({ command: 'blue-whale', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } }) as const
+
+test('没关过时，会话启动就套上蓝鲸主题', withTheme, async ($, on) => {
+  const seen = fakeEngine(on)
+
+  await $.session.start(start)
+  expect(seen.status).toEqual([STATUS])
+})
+
+test('关过以后，会话启动不套主题', withTheme, async ($, on) => {
+  const seen = fakeEngine(on, false)
+
+  await $.session.start(start)
+  expect(seen.status).toEqual([])
+})
+
+test('/blue-whale off 关掉并记住，/blue-whale on 再打开', withTheme, async ($, on) => {
+  const seen = fakeEngine(on)
+
+  await $.session.start(start)
+  const off = await $.command.run(typed('off'))
+
+  expect(off.text).toContain('已关闭')
+  expect(seen.store).toBe(false)
+  expect(seen.status.at(-1)).toBe(undefined)
+
+  const back = await $.command.run(typed(' ON '))
+
+  expect(back.text).toContain('已打开')
+  expect(seen.store).toBe(true)
+  expect(seen.status.at(-1)).toBe(STATUS)
+})
+
+test('不带参数在开和关之间切换', withTheme, async ($, on) => {
+  const seen = fakeEngine(on)
+
+  await $.session.start(start)
+  await $.command.run(typed(''))
+  expect(seen.store).toBe(false)
+  await $.command.run(typed(''))
+  expect(seen.store).toBe(true)
+})
+
+test('参数写错只给用法，不动开关', withTheme, async ($, on) => {
+  const seen = fakeEngine(on)
+
+  await $.session.start(start)
+  const wrong = await $.command.run(typed('maybe'))
+
+  expect(wrong.text).toContain('用法')
+  expect(seen.store).toBe(undefined)
+  expect(seen.status).toEqual([STATUS])
+})
+
+test('蓝鲸只画自己的场景，别人的背景交回给引擎', async ($, on) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+
+  for (const surface of ['desktop', 'mobile'] as const) {
+    const other = await $.ui.mount({
+      plugin: 'blue-whale',
+      surface,
+      component: 'Backdrop',
+      props: { scene: 'lagoon', plugin: 'other', glass: false },
+    })
+
+    expect((await other.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+    await other.unmount()
+
+    const own = await $.ui.mount({
+      plugin: 'blue-whale',
+      surface,
+      component: 'Backdrop',
+      props: { scene: 'whale-girl', plugin: 'blue-whale', glass: { blur: 3, opacity: 0.4 } },
+    })
+
+    expect(await own.find({ type: 'Text', text: /engine/ })).toBe(undefined)
+    await own.unmount()
+  }
+})
