@@ -1,0 +1,5 @@
+{
+  "name": "blue-whale-theme",
+  "owner": { "name": "we1jia" },
+  "plugins": [{ "name": "blue-whale", "source": "./" }]
+}
