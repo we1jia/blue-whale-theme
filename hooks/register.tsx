@@ -99,8 +99,14 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Backdrop' }, ($, e, next) => {
-    // 只画自己的场景：别的插件设的背景交给它自己画
-    if (e.props.scene !== SCENE_NAME) {
+    // 只画自己的场景：别的插件设的背景交给它自己画。
+    // 场景名在新版本里叫 scene、旧版本里叫 id（官方 theme-examples 也两个都读）；
+    // 只认 scene 的话，旧字段下会误以为不是自己的而不画，且没有任何报错。
+    // 两个都没有时照画，宁可多画也不要整张图消失
+    const props = e.props as { scene?: unknown; id?: unknown }
+    const name = typeof props.scene === 'string' ? props.scene : props.id
+
+    if (typeof name === 'string' && name !== SCENE_NAME) {
       return next(e)
     }
     if (e.surface !== 'desktop' && e.surface !== 'mobile') {

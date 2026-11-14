@@ -131,3 +131,25 @@ test('蓝鲸只画自己的场景，别人的背景交回给引擎', async ($, o
     await own.unmount()
   }
 })
+
+test('场景名放在旧字段 id 里时，蓝鲸照样画自己的、放过别人的', async ($, on) => {
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+
+    return <Text>engine</Text>
+  })
+
+  // 旧版客户端只带 id、不带 scene，按引擎的类型写不出来，所以这里绕过类型
+  const backdrop = (props: Record<string, unknown>) =>
+    ({ plugin: 'blue-whale', surface: 'desktop', component: 'Backdrop', props }) as unknown as Parameters<typeof $.ui.mount>[0]
+
+  const own = await $.ui.mount(backdrop({ id: 'whale-girl', plugin: 'blue-whale', glass: false }))
+
+  expect(await own.find({ type: 'Text', text: /engine/ })).toBe(undefined)
+  await own.unmount()
+
+  const other = await $.ui.mount(backdrop({ id: 'lagoon', plugin: 'other', glass: false }))
+
+  expect((await other.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+  await other.unmount()
+})
